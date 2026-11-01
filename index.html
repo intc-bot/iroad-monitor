@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iROAD 外包戰情監控終端</title>
+  <title>iROAD </title>
   <!-- 引入支援多工作表、完整跨欄與樣式的 ExcelJS 與 FileSaver -->
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
@@ -131,20 +131,20 @@
 
   <!-- 頂部導覽列 -->
   <div class="top-bar">
-    <div class="logo">📡 iROAD 外包戰情監控終端</div>
+    <div class="logo">📡 iROAD </div>
     <div class="sys-tools">
-      <button class="btn-tool btn-damage" onclick="openDamageModal()">🚨 管線挖損通報產生器</button>
-      <button class="btn-tool btn-summary" onclick="openDailySummaryModal()">📢 每日定時通報 / 結報</button>
-      <button class="btn-tool btn-excel" onclick="exportToOfficialExcel()">📊 一鍵匯出打卡日報表 (.xlsx)</button>
-      <button class="btn-tool" onclick="openModal('ruleModal')">📋 照片審查速查</button>
-      <button class="btn-tool" onclick="openModal('calcModal')">🧮 查驗計算機</button>
+      <button class="btn-tool btn-damage" onclick="openDamageModal()">🚨 管線挖損通報</button>
+      <button class="btn-tool btn-summary" onclick="openDailySummaryModal()">📢 每日通報 / 結報</button>
+      <button class="btn-tool btn-excel" onclick="exportToOfficialExcel()">📊 一鍵匯出 (.xlsx)</button>
+      <button class="btn-tool" onclick="openModal('ruleModal')">📋 速查</button>
+      <button class="btn-tool" onclick="openModal('calcModal')">🧮 計算機</button>
     </div>
   </div>
 
   <!-- 新增案號 -->
   <div class="input-zone">
-    <input type="text" id="newCaseId" placeholder="輸入監控案號 (例: 352897)">
-    <button class="btn-add" onclick="addCase()">➕ 新增監控</button>
+    <input type="text" id="newCaseId" placeholder="輸入案號 (例: 352897)">
+    <button class="btn-add" onclick="addCase()">➕ 新增</button>
   </div>
 
   <!-- 戰情面板網格 -->
