@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iROAD 外包戰情監控終端</title>
+  <!-- 引入支援多工作表、完整跨欄與樣式的 ExcelJS 與 FileSaver -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0f172a; --bg-card: #1e293b; --bg-modal: #0f172ae6;
+      --text-main: #f8fafc; --text-sub: #94a3b8;
+      --accent: #38bdf8; --accent-hover: #0ea5e9;
+      --danger: #ef4444; --danger-hover: #dc2626;
+      --warning: #f59e0b; --warning-hover: #d97706;
+      --success: #10b981; --success-hover: #059669;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; }
+    body { font-family: "Microsoft JhengHei", "Courier New", monospace; background: var(--bg-dark); color: var(--text-main); margin: 0; padding: 20px; line-height: 1.6; }
+
+    /* 頂部導覽列 */
+    .top-bar { display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.3); margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
+    .logo { font-size: 1.6rem; font-weight: bold; color: var(--accent); display: flex; align-items: center; gap: 10px; letter-spacing: 1px; }
+    .sys-tools { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-tool { background: transparent; color: var(--text-main); border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px; cursor: pointer; transition: 0.2s; font-weight: bold; font-size: 0.9rem; }
+    .btn-tool:hover { background: var(--border); color: var(--accent); }
+    .btn-damage { background: #991b1b; border-color: #ef4444; color: white; }
+    .btn-damage:hover { background: #b91c1c; }
+    .btn-summary { background: #0284c7; border-color: #38bdf8; color: white; }
+    .btn-summary:hover { background: #0369a1; }
+    .btn-excel { background: #059669; border-color: #10b981; color: white; }
+    .btn-excel:hover { background: #047857; color: white; }
+
+    /* 案件輸入區 */
+    .input-zone { display: flex; gap: 15px; max-width: 600px; margin-bottom: 25px; }
+    .input-zone input { flex: 1; padding: 12px 15px; border: 1px solid var(--border); background: var(--bg-card); color: white; border-radius: 8px; font-size: 1.1rem; outline: none; }
+    .input-zone input:focus { border-color: var(--accent); box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); }
+    .btn-add { background: var(--accent); color: var(--bg-dark); border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; cursor: pointer; transition: 0.2s; }
+    .btn-add:hover { background: var(--accent-hover); }
+
+    /* 戰情網格 */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
+    .case-card { background: var(--bg-card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; display: flex; flex-direction: column; position: relative; overflow: hidden; transition: transform 0.2s; }
+    .case-card:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,0,0,0.4); }
+    
+    .card-indicator { height: 4px; width: 100%; position: absolute; top: 0; left: 0; background: var(--border); }
+    .case-card.status-danger .card-indicator { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+    .case-card.status-warning .card-indicator { background: var(--warning); box-shadow: 0 0 10px var(--warning); }
+    .case-card.status-success .card-indicator { background: var(--success); box-shadow: 0 0 10px var(--success); }
+
+    .case-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; margin-top: 5px; }
+    .case-id { font-size: 1.35rem; font-weight: bold; color: var(--text-main); }
+    .case-tools { display: flex; gap: 8px; align-items: center; }
+    .case-edit-btn { color: var(--accent); cursor: pointer; font-size: 0.85rem; font-weight: bold; border: 1px solid var(--accent); padding: 2px 6px; border-radius: 4px; }
+    .case-edit-btn:hover { background: var(--accent); color: var(--bg-dark); }
+    .case-remove { color: var(--text-sub); cursor: pointer; font-size: 0.9rem; }
+    .case-remove:hover { color: var(--danger); }
+    
+    .case-subinfo { font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .status-text { font-size: 0.95rem; color: var(--accent); margin-bottom: 10px; font-weight: bold; background: rgba(56, 189, 248, 0.1); padding: 8px; border-radius: 6px; border-left: 3px solid var(--accent); }
+    .status-text.alert { color: var(--danger); background: rgba(239, 68, 68, 0.1); border-color: var(--danger); }
+
+    .violation-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
+    .tag { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 5px; }
+    .tag span { cursor: pointer; font-weight: bold; }
+    .tag span:hover { color: white; }
+    
+    .timer-display { font-size: 2rem; font-weight: bold; color: var(--danger); text-align: center; margin: 10px 0; display: none; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px; font-family: monospace; letter-spacing: 3px; border: 1px solid rgba(239,68,68,0.3); }
+
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .btn-action { background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border); padding: 8px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: bold; transition: 0.2s; text-align: center; }
+    .btn-action:hover { background: rgba(255,255,255,0.1); }
+    .btn-action.red:hover { border-color: var(--danger); color: var(--danger); }
+    .btn-action.yellow:hover { border-color: var(--warning); color: var(--warning); }
+    .btn-action.green:hover { border-color: var(--success); color: var(--success); }
+
+    .bottom-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+    .btn-audit { background: #1e3a8a; border: 1px solid #3b82f6; color: #93c5fd; padding: 9px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: bold; text-align: center; transition: 0.2s; }
+    .btn-audit:hover { background: #2563eb; color: white; }
+    .btn-log { background: var(--border); color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; justify-content: center; gap: 8px; transition: 0.2s; font-size: 0.95rem; }
+    .btn-log:hover { background: #475569; }
+    .report-group { display: flex; gap: 8px; }
+    .btn-report { flex: 1; background: transparent; border: 1px solid var(--accent); color: var(--accent); padding: 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .btn-report:hover { background: var(--accent); color: var(--bg-dark); }
+    .btn-emergency { flex: 1; background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 8px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .btn-emergency:hover { background: var(--danger); color: white; }
+
+    /* 彈出視窗 */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-modal); z-index: 1000; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(5px); }
+    .modal-content { background: var(--bg-card); border: 1px solid var(--border); padding: 25px; border-radius: 12px; max-width: 680px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 15px; }
+    .modal-header h3 { margin: 0; color: var(--accent); font-size: 1.2rem; }
+    .close-btn { background: none; border: none; color: var(--text-sub); font-size: 1.5rem; cursor: pointer; }
+    .close-btn:hover { color: white; }
+
+    .tab-buttons { display: flex; gap: 5px; margin-bottom: 15px; flex-wrap: wrap; }
+    .tab-btn { background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: var(--text-sub); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; }
+    .tab-btn.active { background: var(--accent); color: var(--bg-dark); border-color: var(--accent); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; margin-bottom: 5px; color: var(--text-sub); font-size: 0.85rem; font-weight: bold; }
+    .form-group input, .form-group select { width: 100%; padding: 9px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: white; border-radius: 6px; font-family: inherit; font-size: 0.95rem; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    
+    .quick-pill-group { display: flex; gap: 8px; margin-bottom: 15px; }
+    .quick-pill { flex: 1; padding: 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: var(--text-main); font-weight: bold; font-size: 0.85rem; cursor: pointer; text-align: center; transition: 0.2s; }
+    .quick-pill:hover, .quick-pill.active { background: var(--danger); border-color: var(--danger); color: white; }
+
+    .btn-submit { width: 100%; background: var(--accent); color: var(--bg-dark); border: none; padding: 11px; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-top: 5px; }
+    .btn-submit:hover { background: var(--accent-hover); }
+
+    .checklist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; max-height: 250px; overflow-y: auto; padding-right: 5px; }
+    .check-item { background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 8px; border-radius: 6px; display: flex; align-items: flex-start; gap: 8px; font-size: 0.85rem; cursor: pointer; }
+    .check-item:hover { border-color: var(--danger); background: rgba(239,68,68,0.1); }
+    .check-item input { margin-top: 3px; cursor: pointer; }
+
+    .preview-box { background: rgba(0,0,0,0.4); border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin: 15px 0; font-family: monospace; font-size: 0.95rem; color: #38bdf8; white-space: pre-wrap; line-height: 1.5; }
+    .script-box { background: rgba(0,0,0,0.3); border: 1px solid var(--border); padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+    .script-box h4 { margin-top: 0; color: var(--warning); margin-bottom: 8px; font-size: 0.95rem; }
+    .script-box p { font-size: 0.9rem; margin: 4px 0; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部導覽列 -->
+  <div class="top-bar">
+    <div class="logo">📡 iROAD 外包戰情監控終端</div>
+    <div class="sys-tools">
+      <button class="btn-tool btn-damage" onclick="openDamageModal()">🚨 管線挖損通報產生器</button>
+      <button class="btn-tool btn-summary" onclick="openDailySummaryModal()">📢 每日定時通報 / 結報</button>
+      <button class="btn-tool btn-excel" onclick="exportToOfficialExcel()">📊 一鍵匯出打卡日報表 (.xlsx)</button>
+      <button class="btn-tool" onclick="openModal('ruleModal')">📋 照片審查速查</button>
+      <button class="btn-tool" onclick="openModal('calcModal')">🧮 查驗計算機</button>
+    </div>
+  </div>
+
+  <!-- 新增案號 -->
+  <div class="input-zone">
+    <input type="text" id="newCaseId" placeholder="輸入監控案號 (例: 352897)">
+    <button class="btn-add" onclick="addCase()">➕ 新增監控</button>
+  </div>
+
+  <!-- 戰情面板網格 -->
+  <div class="grid" id="dashboard"></div>
+
+  <!-- ================= 彈出視窗群 ================= -->
+
+  <!-- 1. 管線挖損通報產生器 Modal -->
+  <div class="modal-overlay" id="damageModal">
+    <div class="modal-content" style="border-color: var(--danger); max-width: 720px;">
+      <div class="modal-header">
+        <h3 style="color: var(--danger);">🚨 道路管線遭挖損通報 ＆ 搶修調度產生器</h3>
+        <button class="close-btn" onclick="closeModal('damageModal')">×</button>
+      </div>
+
+      <div class="quick-pill-group">
+        <div class="quick-pill active" id="pill_others" onclick="setDamageDirection('others')">別人挖到我們 (如中華電信挖損自來水)</div>
+        <div class="quick-pill" id="pill_we" onclick="setDamageDirection('we')">我們挖到別人 (如自來水挖損瓦斯/台電)</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>通報群組抬頭</label>
+          <input type="text" id="dmg_title" value="道管中心-中華電信-通報" oninput="updateDamagePreview()">
+        </div>
+        <div class="form-group">
+          <label>報別</label>
+          <select id="dmg_stage" onchange="updateDamagePreview()">
+            <option value="初報">初報 (進行搶修調度)</option>
+            <option value="續報">續報 (搶修處理中)</option>
+            <option value="初報結報" selected>初報結報 (現場已修妥)</option>
+            <option value="結報">結報</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>挖損施工單位 (肇事者)</label>
+          <input type="text" id="dmg_damager" value="中華電信" oninput="updateDamagePreview()">
+        </div>
+        <div class="form-group">
+          <label>受損管線單位 (受害者)</label>
+          <input type="text" id="dmg_victim" value="自來水" oninput="updateDamagePreview()">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>相關路證案號</label>
+          <input type="text" id="dmg_caseId" value="352897" oninput="updateDamagePreview()">
+        </div>
+        <div class="form-group">
+          <label>受影響行政責任區 (用於搶修派工通知)</label>
+          <input type="text" id="dmg_district" value="土城區" oninput="updateDamagePreview()">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>發生具體地點 (含門牌、車道或人行道特徵)</label>
+        <input type="text" id="dmg_location" value="土城區大安里中央路三段92-2號(旁(人行道上))" oninput="updateDamagePreview()">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>接獲時間 (民國年/月/日 時:分)</label>
+          <input type="text" id="dmg_recvTime" value="115年10月30日11時20分" oninput="updateDamagePreview()">
+        </div>
+        <div class="form-group">
+          <label>修復時間</label>
+          <input type="text" id="dmg_fixTime" value="115年10月30日14時05分" oninput="updateDamagePreview()">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>處理情形</label>
+        <input type="text" id="dmg_action" value="現場管損管線已自行修妥" oninput="updateDamagePreview()">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>管線形式 (管徑與材質)</label>
+          <input type="text" id="dmg_spec" value="1吋管" oninput="updateDamagePreview()">
+        </div>
+        <div class="form-group">
+          <label>埋設深度 (m)</label>
+          <input type="text" id="dmg_depth" value="0.24m" oninput="updateDamagePreview()">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>現場負責人姓名</label>
+          <input type="text" id="dmg_picName" value="沈先生" oninput="updateDamagePreview()">
+        </div>
+        <div class="form-group">
+          <label>聯絡電話</label>
+          <input type="text" id="dmg_picPhone" value="0982139175" oninput="updateDamagePreview()">
+        </div>
+      </div>
+
+      <div class="form-group" style="background: rgba(239,68,68,0.1); padding: 10px; border-radius: 6px; border: 1px dashed var(--danger);">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#fca5a5; margin:0;">
+          <input type="checkbox" id="dmg_notifyCheck" checked onchange="updateDamagePreview()">
+          <span>🚨 附帶緊急搶修派員調度通知（若為我方管線受損需調派人員前往時勾選）</span>
+        </label>
+      </div>
+
+      <div style="font-weight:bold; color:var(--text-sub); font-size:0.85rem; margin-top:10px;">📋 挖損通報文即時預覽：</div>
+      <div class="preview-box" id="dmg_previewText"></div>
+
+      <button class="btn-submit" style="background: var(--danger); color: white;" onclick="copyDamageReport()">📋 複製通報文 ＆ 寫入 Excel 挖損紀錄</button>
+    </div>
+  </div>
+
+  <!-- 2. iROAD 實務照片查驗與退件勾選 Modal -->
+  <div class="modal-overlay" id="auditModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="color: var(--accent);">🔍 iROAD 實務照片審核與不通過態樣勾選</h3>
+        <button class="close-btn" onclick="closeModal('auditModal')">×</button>
+      </div>
+      <input type="hidden" id="aud_index">
+
+      <div class="tab-buttons">
+        <button class="tab-btn active" onclick="switchAuditTab(event, 'audTab1')">自主查驗 (平整度/CLSM/厚度)</button>
+        <button class="tab-btn" onclick="switchAuditTab(event, 'audTab2')">定位測量 (箱尺/白板/埋深)</button>
+      </div>
+
+      <div id="audTab1" class="tab-pane active">
+        <div class="form-group">
+          <label>查驗項目</label>
+          <select id="aud_item_select" onchange="renderAuditFailReasons()">
+            <option value="臨時修復AC路面平整度">臨時修復AC路面平整度 (50cm直規量測)</option>
+            <option value="管溝回填澆置CLSM">管溝回填澆置CLSM (車牌/澆置過程)</option>
+            <option value="鋼筋加固及加固層">鋼筋加固 / 回填鋼筋加固層</option>
+            <option value="管溝AC厚度量測">管溝AC厚度量測 (箱尺直立/未回填)</option>
+            <option value="CLSM靜置時間證明">CLSM靜置時間證明 (人員站立5分鐘)</option>
+            <option value="管溝修復含銑鋪噴字">管溝修復含銑鋪噴字 (噴漆/日期/單位)</option>
+            <option value="現場標線照">現場標線照 (4角對角線預拍)</option>
+          </select>
+        </div>
+        <div style="font-weight:bold; color:var(--danger); font-size:0.85rem; margin-top:10px;">⚠️ 勾選不通過退件原因：</div>
+        <div class="checklist-grid" id="aud_reasons_container"></div>
+      </div>
+
+      <div id="audTab2" class="tab-pane">
+        <div class="form-row">
+          <div class="form-group">
+            <label>測點設施位置</label>
+            <select id="aud_loc_select">
+              <option value="起點">起點</option>
+              <option value="轉折點-1">轉折點-1</option>
+              <option value="轉折點-2">轉折點-2</option>
+              <option value="轉折點-3">轉折點-3</option>
+              <option value="每20m點位">每20m點位</option>
+              <option value="終點">終點</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>量測深度 (m)</label>
+            <input type="text" id="aud_depth_input" placeholder="例如: 1.35m 或 0.4m">
+          </div>
+        </div>
+        <div style="font-weight:bold; color:var(--danger); font-size:0.85rem; margin-top:10px;">⚠️ 勾選定位測量不通過原因：</div>
+        <div class="checklist-grid" id="aud_loc_reasons_container"></div>
+      </div>
+
+      <button class="btn-submit" style="background:var(--danger); color:white;" onclick="applyAuditResults()">❌ 判定不合格並登記缺失</button>
+      <button class="btn-submit" style="background:var(--success); color:white; margin-top:8px;" onclick="applyAuditPass()">✅ 判定全數合格 (查無異常)</button>
+    </div>
+  </div>
+
+  <!-- 3. 每日定時通報 / 結報產生器 Modal -->
+  <div class="modal-overlay" id="dailySummaryModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="color: var(--accent);">📢 每日全區巡查定時通報 / 結報產生器</h3>
+        <button class="close-btn" onclick="closeModal('dailySummaryModal')">×</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group"><label>單位抬頭</label><input type="text" id="ds_unit" value="台水十二區" oninput="updateSummaryPreview()"></div>
+        <div class="form-group"><label>日期 (格式: M/D 或 MM/DD)</label><input type="text" id="ds_date" value="10/30" oninput="updateSummaryPreview()"></div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>班別</label>
+          <select id="ds_shift" onchange="updateSummaryPreview()"><option value="日間" selected>日間</option><option value="夜間">夜間</option></select>
+        </div>
+        <div class="form-group">
+          <label>通報梯次</label>
+          <select id="ds_type" onchange="onSummaryTypeChange()">
+            <option value="1">第 1 次通報</option>
+            <option value="2">第 2 次通報</option>
+            <option value="3" selected>第 3 次通報</option>
+            <option value="4">第 4 次 (結報)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="script-box">
+        <h4>(1) 申挖案件統計</h4>
+        <div class="form-row-3">
+          <div class="form-group"><label>總申挖件數</label><input type="number" id="ds_applyTotal" value="13" oninput="updateSummaryPreview()"></div>
+          <div class="form-group" id="ds_box_applyStart"><label>已開工件數</label><input type="number" id="ds_applyStart" value="13" oninput="updateSummaryPreview()"></div>
+          <div class="form-group"><label>已收工件數</label><input type="number" id="ds_applyFinish" value="9" oninput="updateSummaryPreview()"></div>
+        </div>
+      </div>
+
+      <div id="ds_extra_fields">
+        <div class="script-box">
+          <h4>(2) 逾時案件統計</h4>
+          <div class="form-row">
+            <div class="form-group"><label>逾時共計件數</label><input type="number" id="ds_otTotal" value="4" oninput="updateSummaryPreview()"></div>
+            <div class="form-group"><label>已准駁件數</label><input type="number" id="ds_otApproved" value="4" oninput="updateSummaryPreview()"></div>
+          </div>
+        </div>
+
+        <div class="script-box">
+          <h4>(3) 搶修案件統計</h4>
+          <div class="form-row-3">
+            <div class="form-group"><label>搶修總件數</label><input type="number" id="ds_repairTotal" value="2" oninput="updateSummaryPreview()"></div>
+            <div class="form-group"><label>開工件數</label><input type="number" id="ds_repairStart" value="0" oninput="updateSummaryPreview()"></div>
+            <div class="form-group"><label>未開工件數</label><input type="number" id="ds_repairUnstart" value="2" oninput="updateSummaryPreview()"></div>
+          </div>
+        </div>
+
+        <div class="script-box">
+          <h4>(4) 施工中案件 - 敏感性路段</h4>
+          <div class="form-row">
+            <div class="form-group"><label>敏感路段件數</label><input type="number" id="ds_sensitiveCount" value="1" oninput="updateSummaryPreview()"></div>
+            <div class="form-group"><label>案號清單</label><input type="text" id="ds_sensitiveCases" value="348769" oninput="updateSummaryPreview()"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="ds_final_repair_field" style="display:none;" class="script-box">
+        <h4>(2) 搶修案件統計</h4>
+        <div class="form-group"><label>搶修總件數</label><input type="number" id="ds_finalRepairTotal" value="0" oninput="updateSummaryPreview()"></div>
+      </div>
+
+      <div style="font-weight:bold; color:var(--text-sub); font-size:0.85rem; margin-top:10px;">📋 通報文字即時預覽：</div>
+      <div class="preview-box" id="ds_previewText"></div>
+      <button class="btn-submit" onclick="copyDailySummary()">📋 複製通報文並同步雲端</button>
+    </div>
+  </div>
+
+  <!-- 4. 案件詳細編輯 Modal -->
+  <div class="modal-overlay" id="editCaseModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>✏️ 編輯案件詳細資訊 (對齊報表欄位)</h3>
+        <button class="close-btn" onclick="closeModal('editCaseModal')">×</button>
+      </div>
+      <input type="hidden" id="ec_index">
+      <div class="form-group"><label>施工廠商 (Col E)</label><input type="text" id="ec_contractor"></div>
+      <div class="form-group"><label>路權機關 (Col F)</label><input type="text" id="ec_authority"></div>
+      <div class="form-group"><label>行政區 (Col G)</label><input type="text" id="ec_district"></div>
+      <div class="form-group"><label>施工地點 (Col H)</label><input type="text" id="ec_road"></div>
+      <div class="form-group"><label>施工時段 (Col L，例: 09~16)</label><input type="text" id="ec_workHours"></div>
+      <div class="form-group"><label>開工通報時間 (Col M，例: 09:02)</label><input type="text" id="ec_startTime"></div>
+      <button class="btn-submit" onclick="saveCaseDetails()">💾 儲存並更新卡片</button>
+    </div>
+  </div>
+
+  <!-- 5. 單案逾時通報 Modal -->
+  <div class="modal-overlay" id="overtimeModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📝 產生單案逾時通報文</h3>
+        <button class="close-btn" onclick="closeModal('overtimeModal')">×</button>
+      </div>
+      <input type="hidden" id="o_caseId">
+      <div class="form-group"><label>群組抬頭</label><input type="text" id="o_groupTitle" value="台水十二區"></div>
+      <div class="form-group"><label>通報次數</label>
+        <select id="o_times"><option value="1">第 1 次通報</option><option value="2">第 2 次通報</option><option value="3">第 3 次 (已收工) 通報</option></select>
+      </div>
+      <div class="form-group"><label>逾時原因 (對應 Col AH)</label>
+        <select id="o_reason">
+          <option value="其他">其他</option>
+          <option value="待CLSM料">待CLSM料</option>
+          <option value="待AC料">待AC料</option>
+          <option value="遇管障">遇管障</option>
+          <option value="機具故障">機具故障</option>
+          <option value="下雨">下雨</option>
+          <option value="挖損管線">挖損管線</option>
+        </select>
+      </div>
+      <div class="form-group"><label>原應收工時間 (HH:MM)</label><input type="time" id="o_endTime" value="16:00"></div>
+      <button class="btn-submit" onclick="generateOvertime()">📋 產生並複製通報文</button>
+    </div>
+  </div>
+
+  <!-- 6. 計算機 Modal -->
+  <div class="modal-overlay" id="calcModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🧮 自主查驗自動判定機</h3>
+        <button class="close-btn" onclick="closeModal('calcModal')">×</button>
+      </div>
+      <div class="script-box">
+        <h4>🚧 AC 厚度判定</h4>
+        <div class="form-group"><label>管溝 AC 厚度 (cm) [規範≥20]</label><input type="number" id="c_ac1" placeholder="輸入數值" oninput="checkAC()"></div>
+        <div class="form-group"><label>面層 AC 厚度 (cm) [規範≥5]</label><input type="number" id="c_ac2" placeholder="輸入數值" oninput="checkAC()"></div>
+        <div id="acResult" class="calc-result"></div>
+      </div>
+      <div class="script-box">
+        <h4>📏 平整度量測點位計算</h4>
+        <div class="form-group"><label>管溝總長度 (m)</label><input type="number" id="c_len" placeholder="輸入長度" oninput="checkPoints()"></div>
+        <div id="lenResult" class="calc-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. 法規速查 Modal -->
+  <div class="modal-overlay" id="ruleModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📋 道管中心照片審查規範速查</h3>
+        <button class="close-btn" onclick="closeModal('ruleModal')">×</button>
+      </div>
+      <div class="tab-buttons">
+        <button class="tab-btn active" onclick="switchTab(event, 'tab1')">開工/收工通報</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab2')">AC鋪面與管溝</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab3')">孔蓋提升降埋</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab4')">定位測量(埋深)</button>
+        <button class="tab-btn" onclick="switchTab(event, 'tab5')">平整度量測</button>
+      </div>
+      <div id="tab1" class="tab-pane active script-box">
+        <h4>🟢 開工/收工通報審查</h4>
+        <ul>
+          <li>挖掘前遠景：街景完整，<b>機具不得佔用範圍</b>。</li>
+          <li>告示牌：資訊完整清晰，<b>須張貼路證及交維圖說</b>。</li>
+          <li>證照查驗：監造與現場管理人員須與路證相符、無過期。</li>
+          <li>管溝修復：面對車行<b>順向(前)與逆向(後)</b>街景，機具全撤。</li>
+        </ul>
+      </div>
+      <div id="tab2" class="tab-pane script-box">
+        <h4>🚧 AC鋪面與管溝</h4>
+        <ul>
+          <li>CLSM澆置：照片<b>須能清楚辨識車牌</b>。</li>
+          <li>靜置證明：體重 60kg 人員站立 5 分鐘面層無下陷。</li>
+          <li>AC厚度：管溝 AC <b>≥ 20cm</b>；面層 AC <b>≥ 5cm</b>。</li>
+        </ul>
+      </div>
+      <div id="tab3" class="tab-pane script-box">
+        <h4>🕳️ 孔蓋提升 / 降埋</h4>
+        <ul>
+          <li>降埋深度：降埋至少 <b>20cm 以上</b>。</li>
+          <li>孔底深度：水平箱尺直立，從孔底垂直起算至路面。</li>
+        </ul>
+      </div>
+      <div id="tab4" class="tab-pane script-box">
+        <h4>📏 定位測量（埋深量測）</h4>
+        <ul>
+          <li><b>法定埋深：</b> 快慢車道≥120cm；巷道(4m下)≥70cm；人行道≥50cm。</li>
+          <li><b>白板必填：</b> 施工日期、工程名稱、案號、地點、測點編號、管線埋深。</li>
+          <li>箱尺操作：垂直箱尺須<b>用手扶正</b>（<b>嚴禁放於鋼筋上</b>）。</li>
+        </ul>
+      </div>
+      <div id="tab5" class="tab-pane script-box">
+        <h4>📐 臨時路面平整度量測</h4>
+        <ul>
+          <li><b>工具強制規定：</b> 必須採用<b>「半米尺規 (50cm直規)」</b>。</li>
+          <li>量測頻率：管溝長度 &gt; 20m 者，<b>每隔 20m 量測 1 次</b>。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ==========================================
+// Google Apps Script API URL
+// ==========================================
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby8-IPuXyqZ3-N0Cmjssc7PaqVIVGQzMBFvOfQIlIXSgNwS50xvyPMn-3VSoKyYJsP6/exec";
+
+// 審核態樣清單
+const AUDIT_REASONS = {
+  "臨時修復AC路面平整度": [
+    "未採用50cm直規", "未每隔20cm量測1次", "遠照無背景", "無加註編號及數據",
+    "量測位置有誤", "量測方式有誤", "未量測新舊最深處", "近照無法清楚辨識讀數",
+    "夜間未打燈太暗", "未放照片", "未完整量測", "三角量尺放置位置錯誤",
+    "數據與填報不一致", "量測數據不合格"
+  ],
+  "管溝回填澆置CLSM": [
+    "無背景", "無混凝土車", "無車牌", "車牌模糊", "未放照片", "無澆置過程"
+  ],
+  "鋼筋加固及加固層": [
+    "無背景", "無法清楚辨識", "未見鋼筋", "未放照片", "(A單記點)未經同意破壞地下公共管線致生公安意外"
+  ],
+  "管溝AC厚度量測": [
+    "無背景", "水平箱尺未直立", "無水平尺", "水平尺未平放路面", "未放照片", "已回填AC"
+  ],
+  "CLSM靜置時間證明": [
+    "無背景", "無人員站立", "明顯下陷", "非站立管溝中間", "未放照片"
+  ],
+  "管溝修復含銑鋪噴字": [
+    "無噴漆", "無日期", "無單位", "未放照片"
+  ],
+  "現場標線照": [
+    "未放照片", "無背景", "機具遮擋標線"
+  ]
+};
+
+const LOCATION_REASONS = [
+  "無背景", "無拍到管線", "箱尺非管頂至路面", "水平非採用箱尺量測",
+  "垂直非採用箱尺量測", "箱尺讀數不清楚", "水平箱尺未直立", "水平箱尺處路面未噴漆",
+  "水平箱尺未平放路面", "無加註編號", "填報埋設深度與量測不符", "無水平箱尺",
+  "未放照片", "水平及垂直箱尺未貼平", "照片重複", "水平箱尺處路面未標示測點符號",
+  "管線埋設深度手寫板資訊不全", "無管線埋設深度手寫板", "未完整量測", "量測方向錯誤",
+  "量測位置錯誤", "管線淺埋", "垂直箱尺歪斜"
+];
+
+let cases = [];
+let damageRecords = []; // 儲存挖損紀錄以供匯出 Excel 第 3 頁
+
+window.onload = () => {
+  const now = new Date();
+  document.getElementById("ds_date").value = `${now.getMonth()+1}/${now.getDate()}`;
+  
+  // 載入預設案號 352897
+  document.getElementById("newCaseId").value = "352897";
+  addCase();
+};
+
+function addCase() {
+  const caseId = document.getElementById("newCaseId").value.trim();
+  if(!caseId) return;
+
+  cases.unshift({
+    id: caseId,
+    applicant: "台灣自來水公司第十二區管理處",
+    contractor: "漢維營造有限公司",
+    authority: "土城區公所",
+    district: "土城區",
+    road: "土城區大安里中央路三段92-2號(旁(人行道上))",
+    workHours: "09~16",
+    startTime: "09:12",
+    finishTime: null,
+    isOvertime: false,
+    otApplyTime: "X",
+    otGroupTime: "X",
+    otReason: "無",
+    timer: null,
+    timeLeft: 0,
+    status: '正常監控中',
+    lastLog: '無',
+    auditPass: true,
+    violations: []
+  });
+
+  document.getElementById("newCaseId").value = "";
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const dashboard = document.getElementById("dashboard");
+  dashboard.innerHTML = cases.map((c, index) => {
+    
+    let statusClass = "status-success";
+    let textClass = "";
+    if (c.violations.length > 0 || c.status.includes('無') || c.status.includes('未') || !c.auditPass) { statusClass = "status-danger"; textClass = "alert"; }
+    else if (c.status.includes('逾時未申請') || c.status.includes('待命') || c.isOvertime) { statusClass = "status-warning"; textClass = "alert"; }
+
+    let tagsHtml = c.violations.map((v, vIndex) => `
+      <div class="tag">⚠️ ${v} <span onclick="removeViolation(${index}, ${vIndex})">×</span></div>
+    `).join("");
+
+    return `
+      <div class="case-card ${statusClass}" id="card-${index}">
+        <div class="card-indicator"></div>
+        <div class="case-header">
+          <span class="case-id"># ${c.id}</span>
+          <div class="case-tools">
+            <span class="case-edit-btn" onclick="openEditCaseModal(${index})">✏️ 編輯</span>
+            <span class="case-remove" onclick="removeCase(${index})">✕ 移除</span>
+          </div>
+        </div>
+        <div class="case-subinfo">📍 ${c.district} | ${c.road}</div>
+        <div class="status-text ${textClass}">⚡ ${c.status} <br><span style="font-size:0.8rem; font-weight:normal; color:var(--text-sub);">時段: ${c.workHours} | 上次紀錄: ${c.lastLog}</span></div>
+        
+        <div class="violation-tags">${tagsHtml}</div>
+
+        <div class="action-grid">
+          <button class="btn-action red" onclick="setTimer(${index}, '無畫面或遮擋', 15)">📷 無畫面(15m)</button>
+          <button class="btn-action red" onclick="setTimer(${index}, '未拍管溝/澆置', 30)">🚧 漏拍關鍵(30m)</button>
+          <button class="btn-action yellow" onclick="setTimer(${index}, '逾時未申請', 0)">⏰ 逾時未申</button>
+          <button class="btn-action yellow" onclick="setTimer(${index}, '管障待命協調', 0)">⚠️ 管障待命</button>
+        </div>
+
+        <div class="timer-display" id="timer-${index}">15:00</div>
+        
+        <div class="bottom-actions">
+          <button class="btn-audit" onclick="openAuditModal(${index})">🔍 實務照片查驗與退件審查</button>
+          <div class="report-group">
+            <button class="btn-report" onclick="openModal('overtimeModal', ${index})">📝 逾時通報</button>
+            <button class="btn-emergency" onclick="openDamageModalFromCase(${index})">🚨 管線挖損</button>
+          </div>
+          <button class="btn-log" onclick="logData(${index})">☁️ 同步狀態至雲端報表</button>
+          <button class="btn-action green" style="width:100%; border-color:var(--success); color:var(--success);" onclick="markComplete(${index})">✅ 確認正常收工撤場</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function markComplete(index) {
+  const now = new Date();
+  const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+  cases[index].finishTime = timeStr;
+  setTimer(index, '正常收工', 0);
+}
+
+function setTimer(index, statusText, minutes) {
+  const c = cases[index];
+  c.status = statusText;
+  
+  if (minutes > 0) {
+    if(c.timer) clearInterval(c.timer);
+    c.timeLeft = minutes * 60;
+    renderDashboard();
+    document.getElementById(`timer-${index}`).style.display = "block";
+    
+    c.timer = setInterval(() => {
+      c.timeLeft--;
+      let m = Math.floor(c.timeLeft / 60);
+      let s = c.timeLeft % 60;
+      const el = document.getElementById(`timer-${index}`);
+      if(el) el.innerText = `${m}:${s < 10 ? '0':''}${s}`;
+      
+      if(c.timeLeft <= 0) {
+        clearInterval(c.timer);
+        if(el) { el.innerText = "⚠️ 逾時!"; el.style.color = "white"; el.style.background = "var(--danger)"; }
+        alert(`【系統警告】案號 ${c.id} 的「${statusText}」已超過時限！`);
+      }
+    }, 1000);
+  } else {
+    if(c.timer) clearInterval(c.timer);
+    renderDashboard();
+  }
+}
+
+// ================= 管線挖損通報產生器邏輯 =================
+function openDamageModal() {
+  updateDamagePreview();
+  openModal('damageModal');
+}
+
+function openDamageModalFromCase(index) {
+  const c = cases[index];
+  document.getElementById("dmg_caseId").value = c.id;
+  document.getElementById("dmg_district").value = c.district;
+  document.getElementById("dmg_location").value = c.road;
+  updateDamagePreview();
+  openModal('damageModal');
+}
+
+function setDamageDirection(dir) {
+  document.getElementById("pill_others").classList.toggle("active", dir === 'others');
+  document.getElementById("pill_we").classList.toggle("active", dir === 'we');
+
+  if (dir === 'others') {
+    document.getElementById("dmg_title").value = "道管中心-中華電信-通報";
+    document.getElementById("dmg_damager").value = "中華電信";
+    document.getElementById("dmg_victim").value = "自來水";
+    document.getElementById("dmg_action").value = "已通知" + document.getElementById("dmg_district").value + "服務所派員前往搶修中";
+    document.getElementById("dmg_notifyCheck").checked = true;
+  } else {
+    document.getElementById("dmg_title").value = "道管中心-台水十二區-通報";
+    document.getElementById("dmg_damager").value = "自來水";
+    document.getElementById("dmg_victim").value = "瓦斯";
+    document.getElementById("dmg_action").value = "現場已停止開挖，刻正配合瓦斯公司進行止氣搶修";
+    document.getElementById("dmg_notifyCheck").checked = false;
+  }
+  updateDamagePreview();
+}
+
+function buildDamageText() {
+  const title = document.getElementById("dmg_title").value.trim();
+  const stage = document.getElementById("dmg_stage").value;
+  const damager = document.getElementById("dmg_damager").value.trim();
+  const victim = document.getElementById("dmg_victim").value.trim();
+  const caseId = document.getElementById("dmg_caseId").value.trim();
+  const district = document.getElementById("dmg_district").value.trim();
+  const location = document.getElementById("dmg_location").value.trim();
+  const recvTime = document.getElementById("dmg_recvTime").value.trim();
+  const fixTime = document.getElementById("dmg_fixTime").value.trim();
+  const action = document.getElementById("dmg_action").value.trim();
+  const spec = document.getElementById("dmg_spec").value.trim();
+  const depth = document.getElementById("dmg_depth").value.trim();
+  const picName = document.getElementById("dmg_picName").value.trim();
+  const picPhone = document.getElementById("dmg_picPhone").value.trim();
+  const needNotify = document.getElementById("dmg_notifyCheck").checked;
+
+  let text = `【${title}】\n` +
+             `一、事件 : (案號${caseId})${location}，${damager}挖損${victim}案件(${stage})\n` +
+             `二、接獲時間：${recvTime}\n` +
+             `三、修復時間：${fixTime}\n` +
+             `四、處理情形：${action}\n` +
+             `五、管線形式：${spec}(埋設深度${depth})\n` +
+             `六、現場負責人及連絡電話：${picName} 電話${picPhone}`;
+
+  if (needNotify) {
+    text += `\n※請【${district}】負責人盡速派員前往搶修！`;
+  }
+
+  return text;
+}
+
+function updateDamagePreview() {
+  document.getElementById("dmg_previewText").innerText = buildDamageText();
+}
+
+function copyDamageReport() {
+  const text = buildDamageText();
+  const damager = document.getElementById("dmg_damager").value.trim();
+  const caseId = document.getElementById("dmg_caseId").value.trim();
+  const location = document.getElementById("dmg_location").value.trim();
+  const recvTime = document.getElementById("dmg_recvTime").value.trim();
+  const fixTime = document.getElementById("dmg_fixTime").value.trim();
+  const spec = document.getElementById("dmg_spec").value.trim();
+  const depth = document.getElementById("dmg_depth").value.trim();
+
+  damageRecords.push({
+    caseId: caseId,
+    location: location,
+    damager: damager,
+    recvTime: recvTime,
+    fixTime: fixTime,
+    spec: spec,
+    depth: depth
+  });
+
+  navigator.clipboard.writeText(text).then(() => {
+    alert("✅ 【管線挖損通報文】已成功複製至剪貼簿！可直接貼至 LINE 大群組。\n\n資料已同步留存，匯出 Excel 報表時將自動填入第 3 頁「管線挖損」！");
+    
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ time: timeStr, caseId: `挖損通報(${caseId})`, status: `${damager}挖損`, remark: text.replace(/\n/g, ' | ') })
+    });
+
+    closeModal('damageModal');
+  });
+}
+
+// ================= 照片審查與不通過態樣 =================
+function openAuditModal(index) {
+  document.getElementById("aud_index").value = index;
+  renderAuditFailReasons();
+  renderLocationReasons();
+  openModal('auditModal');
+}
+
+function switchAuditTab(evt, tabId) {
+  document.querySelectorAll("#auditModal .tab-pane").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll("#auditModal .tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(tabId).classList.add("active");
+  evt.currentTarget.classList.add("active");
+}
+
+function renderAuditFailReasons() {
+  const item = document.getElementById("aud_item_select").value;
+  const reasons = AUDIT_REASONS[item] || [];
+  const container = document.getElementById("aud_reasons_container");
+  container.innerHTML = reasons.map((r, i) => `
+    <label class="check-item">
+      <input type="checkbox" name="aud_reason_chk" value="${item}: ${r}">
+      <span>${r}</span>
+    </label>
+  `).join("");
+}
+
+function renderLocationReasons() {
+  const container = document.getElementById("aud_loc_reasons_container");
+  container.innerHTML = LOCATION_REASONS.map((r, i) => `
+    <label class="check-item">
+      <input type="checkbox" name="aud_loc_reason_chk" value="定位測量(${r})">
+      <span>${r}</span>
+    </label>
+  `).join("");
+}
+
+function applyAuditResults() {
+  const index = document.getElementById("aud_index").value;
+  const c = cases[index];
+  const checked = Array.from(document.querySelectorAll("input[name='aud_reason_chk']:checked, input[name='aud_loc_reason_chk']:checked")).map(el => el.value);
+
+  if (checked.length === 0) {
+    alert("請至少勾選一項不合格缺失原因！若全部合格請點擊「判定全數合格」。");
+    return;
+  }
+
+  c.auditPass = false;
+  c.status = `審查不通過(${checked.length}項缺失)`;
+  checked.forEach(reason => {
+    if (!c.violations.includes(reason)) c.violations.push(reason);
+  });
+
+  closeModal('auditModal');
+  renderDashboard();
+  alert(`❌ 案號 ${c.id} 已判定不合格，已自動註記缺失並同步至 Excel 報表備註！`);
+}
+
+function applyAuditPass() {
+  const index = document.getElementById("aud_index").value;
+  const c = cases[index];
+  c.auditPass = true;
+  c.status = "自主查驗與定位審查通過";
+  closeModal('auditModal');
+  renderDashboard();
+  alert(`✅ 案號 ${c.id} 自主查驗與定位測量審核已判定「初審通過 (查無異常)」！`);
+}
+
+function removeViolation(caseIndex, vIndex) {
+  cases[caseIndex].violations.splice(vIndex, 1);
+  if(cases[caseIndex].violations.length === 0) {
+    cases[caseIndex].auditPass = true;
+    cases[caseIndex].status = "正常監控中";
+  }
+  renderDashboard();
+}
+
+function openEditCaseModal(index) {
+  const c = cases[index];
+  document.getElementById("ec_index").value = index;
+  document.getElementById("ec_contractor").value = c.contractor;
+  document.getElementById("ec_authority").value = c.authority;
+  document.getElementById("ec_district").value = c.district;
+  document.getElementById("ec_road").value = c.road;
+  document.getElementById("ec_workHours").value = c.workHours;
+  document.getElementById("ec_startTime").value = c.startTime;
+  openModal('editCaseModal');
+}
+
+function saveCaseDetails() {
+  const index = document.getElementById("ec_index").value;
+  const c = cases[index];
+  c.contractor = document.getElementById("ec_contractor").value;
+  c.authority = document.getElementById("ec_authority").value;
+  c.district = document.getElementById("ec_district").value;
+  c.road = document.getElementById("ec_road").value;
+  c.workHours = document.getElementById("ec_workHours").value;
+  c.startTime = document.getElementById("ec_startTime").value;
+  closeModal('editCaseModal');
+  renderDashboard();
+  alert(`✅ 案號 ${c.id} 詳細資訊已更新！`);
+}
+
+function logData(index) {
+  const c = cases[index];
+  const now = new Date();
+  const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+  c.lastLog = timeStr;
+  renderDashboard();
+
+  const vSummary = c.violations.length > 0 ? ` [審查缺失: ${c.violations.join(', ')}]` : '';
+
+  fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST', mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ time: timeStr, caseId: c.id, status: c.status + vSummary, remark: "戰情室快速登錄" })
+  }).then(() => alert(`✅ 案號 ${c.id} 狀態與審查紀錄已同步至 Google 雲端試算表！`));
+}
+
+function removeCase(index) {
+  if (confirm("確定移除此案號？")) {
+    if(cases[index].timer) clearInterval(cases[index].timer);
+    cases.splice(index, 1);
+    renderDashboard();
+  }
+}
+
+// 每日定時通報 / 結報引擎
+function openDailySummaryModal() {
+  const total = cases.length;
+  const finished = cases.filter(c => c.status.includes("正常收工") || c.finishTime).length;
+  const ot = cases.filter(c => c.isOvertime || c.status.includes("逾時")).length;
+  
+  if (total > 0) {
+    document.getElementById("ds_applyTotal").value = total;
+    document.getElementById("ds_applyStart").value = total;
+    document.getElementById("ds_applyFinish").value = finished;
+    document.getElementById("ds_otTotal").value = ot;
+    document.getElementById("ds_otApproved").value = ot;
+  }
+
+  onSummaryTypeChange();
+  openModal('dailySummaryModal');
+}
+
+function onSummaryTypeChange() {
+  const type = document.getElementById("ds_type").value;
+  const extraFields = document.getElementById("ds_extra_fields");
+  const finalRepairField = document.getElementById("ds_final_repair_field");
+  const boxApplyStart = document.getElementById("ds_box_applyStart");
+
+  if (type === "4") {
+    extraFields.style.display = "none";
+    finalRepairField.style.display = "block";
+    boxApplyStart.style.display = "none";
+    document.getElementById("ds_applyFinish").value = document.getElementById("ds_applyTotal").value;
+  } else {
+    extraFields.style.display = "block";
+    finalRepairField.style.display = "none";
+    boxApplyStart.style.display = "block";
+  }
+  updateSummaryPreview();
+}
+
+function buildSummaryText() {
+  const unit = document.getElementById("ds_unit").value.trim();
+  const date = document.getElementById("ds_date").value.trim();
+  const shift = document.getElementById("ds_shift").value;
+  const type = document.getElementById("ds_type").value;
+
+  const applyTotal = document.getElementById("ds_applyTotal").value;
+  const applyStart = document.getElementById("ds_applyStart").value;
+  const applyFinish = document.getElementById("ds_applyFinish").value;
+
+  if (type === "4") {
+    const repairTotal = document.getElementById("ds_finalRepairTotal").value;
+    return `【${unit}】${date}${shift} 結報：\n(1)申挖：${applyTotal}件(收工${applyFinish} 件)。\n(2)搶修：${repairTotal}件。`;
+  } else {
+    const otTotal = document.getElementById("ds_otTotal").value;
+    const otApproved = document.getElementById("ds_otApproved").value;
+    const repairTotal = document.getElementById("ds_repairTotal").value;
+    const repairStart = document.getElementById("ds_repairStart").value;
+    const repairUnstart = document.getElementById("ds_repairUnstart").value;
+    const sensitiveCount = document.getElementById("ds_sensitiveCount").value;
+    const sensitiveCases = document.getElementById("ds_sensitiveCases").value.trim();
+
+    return `【${unit}】${date}${shift}第${type}次通報：\n` +
+           `(1)申挖：${applyTotal}件(開工${applyStart} 件、收工${applyFinish} 件)。\n` +
+           `(2)逾時：共計${otTotal}件(已准駁${otApproved}件)\n` +
+           `(3)搶修：${repairTotal}件(開工${repairStart}件、未開工${repairUnstart}件)。\n` +
+           `(4)上述施工中案件-敏感性路段：${sensitiveCount}件(${sensitiveCases} )。`;
+  }
+}
+
+function updateSummaryPreview() {
+  document.getElementById("ds_previewText").innerText = buildSummaryText();
+}
+
+function copyDailySummary() {
+  const text = buildSummaryText();
+  const type = document.getElementById("ds_type").value;
+  const title = type === "4" ? "結報" : `第${type}次通報`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    alert(`✅ 【${title}】通報文已複製至剪貼簿！可直接貼至 LINE 群組。\n\n${text}`);
+    closeModal('dailySummaryModal');
+  });
+}
+
+// 官方 39 欄完全對齊 EXCELJS 匯出引擎
+async function exportToOfficialExcel() {
+  if (cases.length === 0) {
+    alert("目前沒有任何監控案件，請先新增案件！");
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')}`;
+  const fileDateStr = `${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}`;
+
+  const workbook = new ExcelJS.Workbook();
+
+  // 工作表 1: 一般申挖
+  const ws = workbook.addWorksheet('一般申挖', { views: [{ showGridLines: true }] });
+  ws.columns = [
+    { key: 'col1', width: 5.5 }, { key: 'col2', width: 10.5 }, { key: 'col3', width: 11.5 },
+    { key: 'col4', width: 22.5 }, { key: 'col5', width: 19.5 }, { key: 'col6', width: 13.5 },
+    { key: 'col7', width: 10.0 }, { key: 'col8', width: 46.5 }, { key: 'col9', width: 10.5 },
+    { key: 'col10', width: 17.5 }, { key: 'col11', width: 18.5 }, { key: 'col12', width: 9.0 },
+    { key: 'col13', width: 9.0 }, { key: 'col14', width: 7.5 }, { key: 'col15', width: 16.0 },
+    { key: 'col16', width: 13.0 }, { key: 'col17', width: 13.0 }, { key: 'col18', width: 12.0 },
+    { key: 'col19', width: 12.5 }, { key: 'col20', width: 12.0 }, { key: 'col21', width: 11.0 },
+    { key: 'col22', width: 16.0 }, { key: 'col23', width: 15.5 }, { key: 'col24', width: 13.0 },
+    { key: 'col25', width: 16.5 }, { key: 'col26', width: 15.0 }, { key: 'col27', width: 9.0 },
+    { key: 'col28', width: 13.0 }, { key: 'col29', width: 13.0 }, { key: 'col30', width: 11.0 },
+    { key: 'col31', width: 14.5 }, { key: 'col32', width: 14.5 }, { key: 'col33', width: 15.0 },
+    { key: 'col34', width: 13.0 }, { key: 'col35', width: 11.0 }, { key: 'col36', width: 9.0 },
+    { key: 'col37', width: 13.0 }, { key: 'col38', width: 9.0 }, { key: 'col39', width: 40.0 }
+  ];
+
+  const r1 = ws.getRow(1); r1.height = 30.75; r1.getCell(1).value = "道路挖掘案件開工及收工打卡情形(每日)";
+  const r2 = ws.getRow(2); r2.height = 42.75;
+  r2.getCell(1).value = "序號"; r2.getCell(2).value = "日期"; r2.getCell(3).value = "案號";
+  r2.getCell(4).value = "申請單位"; r2.getCell(5).value = "施工廠商"; r2.getCell(6).value = "路權機關";
+  r2.getCell(7).value = "行政區"; r2.getCell(8).value = "施工地點"; r2.getCell(9).value = "敏感性及重要幹道";
+  r2.getCell(12).value = "施工時段"; r2.getCell(13).value = "開工通報\n時間"; r2.getCell(14).value = "攝影機情形";
+  r2.getCell(22).value = "案件監控系統審查"; r2.getCell(27).value = "孔蓋工程"; r2.getCell(30).value = "逾時通報";
+  r2.getCell(34).value = "逾時原因"; r2.getCell(35).value = "遇管障是否通報"; r2.getCell(36).value = "收工通報\n時間";
+  r2.getCell(37).value = "實際收工\n時間"; r2.getCell(38).value = "是否\n逾時\n(駐點先依收工通報時間初判)";
+  r2.getCell(39).value = "施工通報紀錄\n(無法打卡原因、開(收)工及自主查(含定位測量)驗照片情形或其他等各項狀況記錄)";
+
+  const r3 = ws.getRow(3); r3.height = 39.0;
+  r3.getCell(14).value = "是否架設"; r3.getCell(15).value = "未全程攝影\n(無此工項者，請於欄位填寫\"X\")";
+  r3.getCell(18).value = "畫面查驗"; r3.getCell(22).value = "開工通報"; r3.getCell(23).value = "自主查驗";
+  r3.getCell(24).value = "監控影像"; r3.getCell(25).value = "定位測量"; r3.getCell(26).value = "收工通報";
+  r3.getCell(27).value = "孔蓋提升\n(降埋)工程 "; r3.getCell(30).value = "申請(核准)時間";
+  r3.getCell(31).value = "路權是否線上審核完畢"; r3.getCell(32).value = "已逾時案件15分鐘內/敏感路段兩小時前是否通報";
+  r3.getCell(33).value = "通報群組時間";
+
+  const r4 = ws.getRow(4); r4.height = 98.0;
+  r4.getCell(9).value = "是否\n位於"; r4.getCell(10).value = "當日施工前、進場、逾時、收工，是否通報NTPC群組";
+  r4.getCell(11).value = "異常狀況或逾時尖峰時段(6:30~9:00；17:00~19:00)恐嚴重影響交通，現場管理或監造人員應提早通報路權機關、交控中心、道管中心及當地分局派出所，並加派義交人員指揮";
+  r4.getCell(15).value = "違規態樣"; r4.getCell(16).value = "是否交維機具全部撤離後才移除畫面";
+  r4.getCell(17).value = "群組通報時間"; r4.getCell(18).value = "交維是否符合計畫書";
+  r4.getCell(19).value = "是否故意遮擋、轉向或關機等情形"; r4.getCell(20).value = "有無原土回填情形";
+  r4.getCell(21).value = "關閉攝影機前是否有環視工區並經駐點人員確認"; r4.getCell(22).value = "相關照片及人員證照是否上傳正確";
+  r4.getCell(23).value = "施工照片是否上傳正確"; r4.getCell(24).value = "影像是否審查完成";
+  r4.getCell(25).value = "管線埋設深度量測是否正確"; r4.getCell(26).value = "收工照片是否上傳正確";
+  r4.getCell(27).value = "施作數量\n(孔)"; r4.getCell(28).value = "降埋\n深度\n(m)"; r4.getCell(29).value = "孔底深度\n(m)";
+
+  // 官方第 5 列範本（紅字呈現）
+  const r5 = ws.getRow(5); r5.height = 51.0;
+  const sampleValues = [
+    "範本", "2026/03/01", "250512", "中華電信股份有限公司臺灣北區電信分公司新北營運處第二客戶網路中心",
+    "漢維營造有限公司", "中和區公所", "中和區", "立人街46號", "是\n否",
+    "非此類路段\n依規定通報\n未依規定通報", "非此類路段\n無異常狀況或逾時\n依規定通報\n未依規定通報",
+    "09~16", "09:15", "是\n否", "無架設\n無畫面(15:30~16:00)\n不需架設", "是\n否(原因)", "16:10 \n未通報",
+    "無架設\n是\n否\n\n\n以上缺失已通知改善", "無架設\n是(時間)\n否\n\n\n以上缺失已通知改善",
+    "無架設\n有(時間)\n疑似(時間)\n無\n\n以上缺失已通知改善", "是\n否",
+    "是\n否(填寫無法立即改善原因填寫於備註)\n\n例：挖掘前照片已遭施工機具佔用",
+    "是\n否(填寫無法立即改善原因填寫於備註)\n\n例：鋼筋加固照片漏拍",
+    "是\n否(填寫無法立即改善原因填寫於備註)\n\n例：系統更新無法審查",
+    "是\n否(填寫無法立即改善原因填寫於備註)\n\n例：轉折點漏拍且管溝已回填",
+    "是\n否(填寫無法立即改善原因填寫於備註)\n", "4", "0.21\n0.22\n0.23\n0.24", "2.1\n2.2\n2.3\n2.4",
+    "18:30", "是/否", "未通報\n是\n否", "16:10 \n未通報",
+    "挖損管線\n遇管障\n待CLSM料\n待AC料\n機具故障\n下雨\n其他(原因)\n(上述原因擇一)", "無管障\n是\n否\n(擇一)",
+    "18:45", "18:20", "是/否",
+    "挖掘前有誤(已被機具佔用)。\n施工告示牌有誤(太遠不清楚)。\n定位測量照片缺少(管線埋設深度測量-轉折點(含水平及垂直變異點))。"
+  ];
+  sampleValues.forEach((val, idx) => { r5.getCell(idx + 1).value = val; });
+
+  cases.forEach((c, idx) => {
+    const rowNum = 6 + idx;
+    const rData = ws.getRow(rowNum); rData.height = 40.15;
+
+    let remarks = "查無異常";
+    if (c.violations.length > 0) {
+      remarks = c.violations.join("；");
+    } else if (c.status.includes("無畫面")) {
+      remarks = "攝影機無畫面，已通知改善";
+    }
+
+    const isOt = c.isOvertime ? "是" : "否";
+    const finish = c.finishTime || (c.status.includes("正常收工") ? (c.lastLog !== "無" ? c.lastLog : "17:12") : "施工中");
+
+    const hasAuditFail = c.violations.some(v => v.includes("平整度") || v.includes("CLSM") || v.includes("鋼筋") || v.includes("厚度"));
+    const hasLocFail = c.violations.some(v => v.includes("定位") || v.includes("箱尺") || v.includes("手寫板") || v.includes("淺埋"));
+
+    const rowValues = [
+      idx + 1, dateStr, c.id, c.applicant, c.contractor, c.authority, c.district, c.road,
+      "是", "非此類路段", "非此類路段", c.workHours, c.startTime, "是",
+      c.status.includes("無畫面") ? `無畫面(${c.lastLog !== '無' ? c.lastLog : '15:30'}~改善)` : "X",
+      "是",
+      c.status.includes("無畫面") ? (c.lastLog !== "無" ? c.lastLog : "10:30") : "X",
+      c.violations.some(v => v.includes("交維")) ? "否" : "是",
+      c.status.includes("遮擋") ? "是" : "否", "無", "是",
+      c.violations.some(v => v.includes("證照")) ? "否(缺證照)" : "是",
+      hasAuditFail ? "否(照片缺失)" : "是",
+      "是",
+      hasLocFail ? "否(量測缺失)" : "是",
+      "是", "X", "X", "X",
+      c.isOvertime ? c.otApplyTime : "X",
+      c.isOvertime ? "是" : "X",
+      c.isOvertime ? "是" : "X",
+      c.isOvertime ? c.otGroupTime : "X",
+      c.isOvertime ? c.otReason : "無",
+      "無管障",
+      finish, finish, isOt, remarks
+    ];
+
+    rowValues.forEach((val, cIdx) => { rData.getCell(cIdx + 1).value = val; });
+  });
+
+  const merges = [
+    'A1:AM1', 'A2:A4', 'B2:B4', 'C2:C4', 'D2:D4', 'E2:E4', 'F2:F4', 'G2:G4', 'H2:H4',
+    'I2:K3', 'L2:L4', 'M2:M4', 'N2:U2', 'N3:N4', 'O3:Q3', 'R3:U3', 'V2:Z2',
+    'AA2:AC2', 'AA3:AC3', 'AD2:AG2', 'AD3:AD4', 'AE3:AE4', 'AF3:AF4', 'AG3:AG4',
+    'AH2:AH4', 'AI2:AI4', 'AJ2:AJ4', 'AK2:AK4', 'AL2:AL4', 'AM2:AM4'
+  ];
+  merges.forEach(m => ws.mergeCells(m));
+
+  const thinBorder = {
+    top: { style: 'thin', color: { argb: 'FF000000' } }, left: { style: 'thin', color: { argb: 'FF000000' } },
+    bottom: { style: 'thin', color: { argb: 'FF000000' } }, right: { style: 'thin', color: { argb: 'FF000000' } }
+  };
+
+  const totalRows = 5 + cases.length;
+  for (let r = 1; r <= totalRows; r++) {
+    const row = ws.getRow(r);
+    for (let c = 1; c <= 39; c++) {
+      const cell = row.getCell(c);
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      if (r === 1) cell.font = { name: '微軟正黑體', size: 16, bold: true };
+      else if (r >= 2 && r <= 4) cell.font = { name: '微軟正黑體', size: 11, bold: false };
+      else if (r === 5) cell.font = { name: '微軟正黑體', size: 11, bold: false, color: { argb: 'FFFF0000' } };
+      else cell.font = { name: '微軟正黑體', size: 11, bold: false };
+    }
+  }
+
+  // 工作表 2: 管線挖損
+  const wsDmg = workbook.addWorksheet('管線挖損', { views: [{ showGridLines: true }] });
+  wsDmg.columns = [
+    { key: 'd1', width: 8 }, { key: 'd2', width: 14 }, { key: 'd3', width: 14 },
+    { key: 'd4', width: 40 }, { key: 'd5', width: 16 }, { key: 'd6', width: 14 },
+    { key: 'd7', width: 14 }, { key: 'd8', width: 16 }, { key: 'd9', width: 14 }
+  ];
+
+  const dr1 = wsDmg.getRow(1); dr1.height = 30;
+  ["序號", "日期", "路證號碼", "地址", "挖損單位", "收到通報時間", "修復通報時間", "管線管徑", "埋設深度"].forEach((h, i) => {
+    dr1.getCell(i + 1).value = h;
+  });
+
+  const dr2 = wsDmg.getRow(2); dr2.height = 25;
+  ["範本", "2026/05/07", "343962", "新店區國校里自國校路65號", "水利局", "11:21:00", "15:45:00", "100mm DIP", "0.65M"].forEach((v, i) => {
+    dr2.getCell(i + 1).value = v;
+  });
+
+  damageRecords.forEach((d, i) => {
+    const row = wsDmg.getRow(3 + i); row.height = 25;
+    [i + 1, dateStr, d.caseId, d.location, d.damager, d.recvTime, d.fixTime, d.spec, d.depth].forEach((val, ci) => {
+      row.getCell(ci + 1).value = val;
+    });
+  });
+
+  const dmgTotalRows = Math.max(2, 2 + damageRecords.length);
+  for (let r = 1; r <= dmgTotalRows; r++) {
+    const row = wsDmg.getRow(r);
+    for (let c = 1; c <= 9; c++) {
+      const cell = row.getCell(c);
+      cell.border = thinBorder;
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      if (r === 1) cell.font = { name: '微軟正黑體', size: 12, bold: true };
+      else if (r === 2) cell.font = { name: '微軟正黑體', size: 11, bold: false, color: { argb: 'FFFF0000' } };
+      else cell.font = { name: '微軟正黑體', size: 11, bold: false };
+    }
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const filename = `${fileDateStr}_台水12區_道路挖掘案件開工及收工打卡.xlsx`;
+  saveAs(new Blob([buffer], { type: "application/octet-stream" }), filename);
+  alert(`✅ 報表匯出成功！已產出官方 39 欄標準報表（含「一般申挖」與「管線挖損」工作表）：\n${filename}`);
+}
+
+// 通用 Modal 控制
+function openModal(modalId, index = null) {
+  if(index !== null) {
+    if(modalId === 'overtimeModal') document.getElementById("o_caseId").value = cases[index].id;
+  }
+  document.getElementById(modalId).style.display = "flex";
+}
+function closeModal(modalId) { document.getElementById(modalId).style.display = "none"; }
+
+function switchTab(evt, tabId) {
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(tabId).classList.add("active");
+  evt.currentTarget.classList.add("active");
+}
+
+function generateOvertime() {
+  const caseId = document.getElementById("o_caseId").value;
+  const groupTitle = document.getElementById("o_groupTitle").value;
+  const times = document.getElementById("o_times").value;
+  const reason = document.getElementById("o_reason").value;
+  const endTime = document.getElementById("o_endTime").value;
+  
+  const now = new Date();
+  let hrs = 0, mins = 0;
+  if (endTime) {
+    const end = new Date();
+    end.setHours(endTime.split(":")[0], endTime.split(":")[1], 0, 0);
+    const diff = now - end;
+    if (diff > 0) { hrs = Math.floor(diff/3600000); mins = Math.floor((diff%3600000)/60000); }
+  }
+
+  const targetCase = cases.find(c => c.id === caseId);
+  if (targetCase) {
+    targetCase.isOvertime = true;
+    targetCase.otApplyTime = "18:00";
+    targetCase.otGroupTime = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    targetCase.otReason = reason;
+    targetCase.status = `逾時通報(第${times}次)`;
+    renderDashboard();
+  }
+
+  let suffix = times === "3" ? "第3次(已收工)通報" : `第${times}次通報`;
+  let text = `【道管中心-${groupTitle}-通報】\n${now.getMonth()+1}/${now.getDate()}日間「已申請逾時待核准仍在施工中案」${suffix}：\n一、案號：${caseId}\n二、施工單位：${targetCase ? targetCase.contractor : '外包廠商'}\n三、路權單位：${targetCase ? targetCase.authority : '區公所'}\n四、施工路段：${targetCase ? targetCase.road : '施工路段'}\n五、佔用情形：雙向佔用單側車道\n六、已逾時:${hrs}小時${mins}分鐘(應收工${endTime}，已申請逾時待核准)\n七、原因：${reason}\n以上逾時案件通報各路權單位知悉!`;
+
+  navigator.clipboard.writeText(text).then(() => { alert("✅ 逾時通報文已複製，並已同步標記至 Excel 報表逾時欄位！"); closeModal('overtimeModal'); });
+}
+
+function checkAC() {
+  const ac1 = parseFloat(document.getElementById('c_ac1').value) || 0;
+  const ac2 = parseFloat(document.getElementById('c_ac2').value) || 0;
+  const res = document.getElementById('acResult');
+  if(ac1===0 && ac2===0) { res.style.display = 'none'; return; }
+  res.style.display = 'block';
+  let msg = [];
+  if(ac1 > 0) msg.push(`管溝AC: ${ac1 >= 20 ? '✅ 合格' : '❌ 不合格 (需≥20cm)'}`);
+  if(ac2 > 0) msg.push(`面層AC: ${ac2 >= 5 ? '✅ 合格' : '❌ 不合格 (需≥5cm)'}`);
+  res.innerHTML = msg.join("<br>");
+  res.className = (ac1 > 0 && ac1 < 20) || (ac2 > 0 && ac2 < 5) ? 'calc-result fail' : 'calc-result';
+}
+
+function checkPoints() {
+  const len = parseFloat(document.getElementById('c_len').value) || 0;
+  const res = document.getElementById('lenResult');
+  if(len <= 0) { res.style.display = 'none'; return; }
+  res.style.display = 'block';
+  if(len <= 20) {
+    res.innerHTML = "✅ 管溝 ≤ 20m<br>需量測 3 點：<b>起點、中心處、終點</b>";
+    res.className = 'calc-result';
+  } else {
+    let extra = Math.floor(len / 20);
+    res.innerHTML = `⚠️ 管溝 > 20m<br>除起訖點外，<b>每 20m 量測 1 次</b>（使用半米尺規）。<br>約需量測 <b>${extra + 2}</b> 個點位。`;
+    res.className = 'calc-result fail';
+  }
+}
+
+window.onclick = function(event) {
+  if (event.target.classList.contains('modal-overlay')) {
+    event.target.style.display = "none";
+  }
+}
+</script>
+</body>
+</html>
