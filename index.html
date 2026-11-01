@@ -150,9 +150,129 @@
   <!-- 戰情面板網格 -->
   <div class="grid" id="dashboard"></div>
 
+  <!-- ================= 全域共用 Datalist (支援選單與自行輸入) ================= -->
+
+  <!-- 新北市 29 行政區選單 -->
+  <datalist id="districtList">
+    <option value="板橋區"></option>
+    <option value="三重區"></option>
+    <option value="中和區"></option>
+    <option value="永和區"></option>
+    <option value="新莊區"></option>
+    <option value="新店區"></option>
+    <option value="樹林區"></option>
+    <option value="鶯歌區"></option>
+    <option value="三峽區"></option>
+    <option value="淡水區"></option>
+    <option value="汐止區"></option>
+    <option value="瑞芳區"></option>
+    <option value="土城區"></option>
+    <option value="蘆洲區"></option>
+    <option value="五股區"></option>
+    <option value="泰山區"></option>
+    <option value="林口區"></option>
+    <option value="深坑區"></option>
+    <option value="石碇區"></option>
+    <option value="坪林區"></option>
+    <option value="三芝區"></option>
+    <option value="石門區"></option>
+    <option value="八里區"></option>
+    <option value="平溪區"></option>
+    <option value="雙溪區"></option>
+    <option value="貢寮區"></option>
+    <option value="金山區"></option>
+    <option value="萬里區"></option>
+    <option value="烏來區"></option>
+  </datalist>
+
+  <!-- 常見路權機關選單 (29 區公所與新北市各路權機關) -->
+  <datalist id="authorityList">
+    <option value="板橋區公所"></option>
+    <option value="三重區公所"></option>
+    <option value="中和區公所"></option>
+    <option value="永和區公所"></option>
+    <option value="新莊區公所"></option>
+    <option value="新店區公所"></option>
+    <option value="樹林區公所"></option>
+    <option value="鶯歌區公所"></option>
+    <option value="三峽區公所"></option>
+    <option value="淡水區公所"></option>
+    <option value="汐止區公所"></option>
+    <option value="瑞芳區公所"></option>
+    <option value="土城區公所"></option>
+    <option value="蘆洲區公所"></option>
+    <option value="五股區公所"></option>
+    <option value="泰山區公所"></option>
+    <option value="林口區公所"></option>
+    <option value="深坑區公所"></option>
+    <option value="石碇區公所"></option>
+    <option value="坪林區公所"></option>
+    <option value="三芝區公所"></option>
+    <option value="石門區公所"></option>
+    <option value="八里區公所"></option>
+    <option value="平溪區公所"></option>
+    <option value="雙溪區公所"></option>
+    <option value="貢寮區公所"></option>
+    <option value="金山區公所"></option>
+    <option value="萬里區公所"></option>
+    <option value="烏來區公所"></option>
+    <option value="新北市政府捷運工程局"></option>
+    <option value="新北市政府養護工程處"></option>
+    <option value="新北市政府工務局"></option>
+    <option value="新北市政府水利局"></option>
+    <option value="新北市政府交通局"></option>
+    <option value="交通部公路局北區養護工程分局"></option>
+    <option value="交通部高速公路局"></option>
+  </datalist>
+
   <!-- ================= 彈出視窗群 ================= -->
 
-  <!-- 1. 管線挖損通報產生器 Modal -->
+  <!-- 1. 案件詳細編輯 Modal (升級：路權機關與行政區支援選單或自填) -->
+  <div class="modal-overlay" id="editCaseModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>✏️ 編輯案件詳細資訊 (對齊報表欄位)</h3>
+        <button class="close-btn" onclick="closeModal('editCaseModal')">×</button>
+      </div>
+      <input type="hidden" id="ec_index">
+      
+      <div class="form-group">
+        <label>施工廠商 (Col E)</label>
+        <input type="text" id="ec_contractor">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>行政區 (Col G) - 可點選或自打</label>
+          <input type="text" id="ec_district" list="districtList" placeholder="請選擇或輸入行政區" oninput="onDistrictInputChange(this.value)">
+        </div>
+        <div class="form-group">
+          <label>路權機關 (Col F) - 可點選或自打</label>
+          <input type="text" id="ec_authority" list="authorityList" placeholder="請選擇或輸入路權機關">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>施工地點 (Col H)</label>
+        <input type="text" id="ec_road">
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>施工時段 (Col L，例: 09~16)</label>
+          <input type="text" id="ec_workHours">
+        </div>
+        <div class="form-group">
+          <label>開工通報時間 (Col M，例: 09:02)</label>
+          <input type="text" id="ec_startTime">
+        </div>
+      </div>
+
+      <button class="btn-submit" onclick="saveCaseDetails()">💾 儲存並更新卡片</button>
+    </div>
+  </div>
+
+  <!-- 2. 管線挖損通報產生器 Modal -->
   <div class="modal-overlay" id="damageModal">
     <div class="modal-content" style="border-color: var(--danger); max-width: 720px;">
       <div class="modal-header">
@@ -198,8 +318,8 @@
           <input type="text" id="dmg_caseId" value="352897" oninput="updateDamagePreview()">
         </div>
         <div class="form-group">
-          <label>受影響行政責任區 (用於搶修派工通知)</label>
-          <input type="text" id="dmg_district" value="土城區" oninput="updateDamagePreview()">
+          <label>受影響行政責任區 (可選或自填)</label>
+          <input type="text" id="dmg_district" list="districtList" value="土城區" oninput="updateDamagePreview()">
         </div>
       </div>
 
@@ -260,7 +380,7 @@
     </div>
   </div>
 
-  <!-- 2. iROAD 實務照片查驗與退件勾選 Modal -->
+  <!-- 3. iROAD 實務照片查驗與退件勾選 Modal -->
   <div class="modal-overlay" id="auditModal">
     <div class="modal-content">
       <div class="modal-header">
@@ -318,7 +438,7 @@
     </div>
   </div>
 
-  <!-- 3. 每日定時通報 / 結報產生器 Modal -->
+  <!-- 4. 每日定時通報 / 結報產生器 Modal -->
   <div class="modal-overlay" id="dailySummaryModal">
     <div class="modal-content">
       <div class="modal-header">
@@ -391,24 +511,6 @@
       <div style="font-weight:bold; color:var(--text-sub); font-size:0.85rem; margin-top:10px;">📋 通報文字即時預覽：</div>
       <div class="preview-box" id="ds_previewText"></div>
       <button class="btn-submit" onclick="copyDailySummary()">📋 複製通報文並同步雲端</button>
-    </div>
-  </div>
-
-  <!-- 4. 案件詳細編輯 Modal -->
-  <div class="modal-overlay" id="editCaseModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>✏️ 編輯案件詳細資訊 (對齊報表欄位)</h3>
-        <button class="close-btn" onclick="closeModal('editCaseModal')">×</button>
-      </div>
-      <input type="hidden" id="ec_index">
-      <div class="form-group"><label>施工廠商 (Col E)</label><input type="text" id="ec_contractor"></div>
-      <div class="form-group"><label>路權機關 (Col F)</label><input type="text" id="ec_authority"></div>
-      <div class="form-group"><label>行政區 (Col G)</label><input type="text" id="ec_district"></div>
-      <div class="form-group"><label>施工地點 (Col H)</label><input type="text" id="ec_road"></div>
-      <div class="form-group"><label>施工時段 (Col L，例: 09~16)</label><input type="text" id="ec_workHours"></div>
-      <div class="form-group"><label>開工通報時間 (Col M，例: 09:02)</label><input type="text" id="ec_startTime"></div>
-      <button class="btn-submit" onclick="saveCaseDetails()">💾 儲存並更新卡片</button>
     </div>
   </div>
 
@@ -686,6 +788,16 @@ function setTimer(index, statusText, minutes) {
   } else {
     if(c.timer) clearInterval(c.timer);
     renderDashboard();
+  }
+}
+
+// 智慧連動：當行政區輸入或改變時，自動推論對應區公所
+function onDistrictInputChange(val) {
+  if (val && val.endsWith("區")) {
+    const authInput = document.getElementById("ec_authority");
+    if (!authInput.value || authInput.value.endsWith("區公所")) {
+      authInput.value = val + "公所";
+    }
   }
 }
 
